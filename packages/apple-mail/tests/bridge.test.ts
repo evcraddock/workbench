@@ -18,6 +18,7 @@ const message = {
   id,
   accountId: "account-a",
   accountName: "Personal",
+  accountEmailAddresses: ["configured@example.com"],
   sender: "sender@example.com",
   subject: "Receipt",
   receivedAt: "2026-10-19T12:00:00.000Z",
@@ -110,6 +111,53 @@ test("rejects malformed JSON, oversized responses, wrong kinds and body leakage 
       errorCode("INVALID_RESPONSE")
     );
   }
+});
+
+test("validates configured account address arrays without choosing one or accepting malformed metadata", async () => {
+  for (const addresses of [
+    [],
+    ["configured@example.com"],
+    ["first@example.com", "second@example.net"],
+  ]) {
+    const data = { ...inbox, messages: [{ ...message, accountEmailAddresses: addresses }] };
+    assert.deepEqual(await bridgeWith(data).run({ action: "inbox", limit: 10 }), data);
+  }
+  for (const addresses of [
+    undefined,
+    null,
+    "to@example.com",
+    [null],
+    [1],
+    [""],
+    ["  "],
+    ["x".repeat(16385)],
+  ]) {
+    const data = { ...inbox, messages: [{ ...message, accountEmailAddresses: addresses }] };
+    await assert.rejects(
+      bridgeWith(data).run({ action: "inbox", limit: 10 }),
+      errorCode("INVALID_RESPONSE")
+    );
+  }
+});
+
+test("configured account addresses are bound to the inspected approval snapshot", async () => {
+  const preview = {
+    kind: "inspect",
+    operation: "archive" as const,
+    message,
+    destination: "Archive",
+    approvalToken: "",
+  };
+  preview.approvalToken = approvalToken(preview);
+  const changed = {
+    ...preview,
+    message: { ...message, accountEmailAddresses: ["different@example.com"] },
+  };
+  assert.notEqual(approvalToken(changed), preview.approvalToken);
+  await assert.rejects(
+    bridgeWith(changed).run({ action: "inspect", operation: "archive", id }),
+    errorCode("INVALID_RESPONSE")
+  );
 });
 
 test("validates read state, body bounds, target identity, approval snapshots, and mutation counts", async () => {

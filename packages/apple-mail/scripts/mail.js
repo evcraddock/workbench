@@ -93,10 +93,14 @@ function summary(message) {
   var parts = identity(message);
   var id = "mail-v1:" + encodeURIComponent(JSON.stringify(parts));
   parseId(id);
+  var account = message.mailbox().account();
+  // Mail account configuration, never message recipients or delivery headers.
+  var addresses = account.emailAddresses();
   return {
     id: id,
     accountId: parts[0],
-    accountName: message.mailbox().account().name(),
+    accountName: account.name(),
+    accountEmailAddresses: addresses == null ? [] : addresses,
     sender: message.sender(),
     subject: message.subject(),
     receivedAt: parts[2],
@@ -140,6 +144,7 @@ function approval(message, operation, destination) {
     operation: operation,
     id: metadata.id,
     accountName: metadata.accountName,
+    accountEmailAddresses: metadata.accountEmailAddresses,
     sender: metadata.sender,
     subject: metadata.subject,
     receivedAt: metadata.receivedAt,

@@ -26,6 +26,7 @@ interface FakeMailbox {
 interface FakeAccount {
   id(): string;
   name(): string;
+  emailAddresses(): string[] | null | undefined;
   mailboxes: ReturnType<typeof collection<FakeMailbox>>;
 }
 function collection<T>(get: () => T[]) {
@@ -56,10 +57,11 @@ function fixture() {
       message.state.box = options.to;
     },
   };
-  function addAccount(id: string) {
+  function addAccount(id: string, addresses: string[] = [`${id}@accounts.example`]) {
     const account: FakeAccount = {
       id: () => id,
       name: () => `Account ${id}`,
+      emailAddresses: () => addresses,
       mailboxes: collection(() => boxes.filter((box) => box.account() === account)),
     };
     accounts.push(account);
@@ -124,6 +126,13 @@ function fixture() {
         },
       },
     });
+    for (const property of ["toRecipients", "ccRecipients", "bccRecipients", "allHeaders"]) {
+      Object.defineProperty(message, property, {
+        get() {
+          throw new Error("Message recipients and delivery headers must not be accessed");
+        },
+      });
+    }
     messages.push(message);
     return message;
   }
@@ -171,6 +180,61 @@ test("inbox returns metadata and account-qualified IDs, without reading bodies o
   assert.deepEqual(f.changes, []);
 });
 
+test("inbox reports configured account addresses, not message recipients or display names", () => {
+  const f = fixture();
+  const addresses = ["configured@example.com", "alias@example.net"];
+  const account = f.addAccount("not-an-email-address", addresses);
+  f.addMessage(account, 1);
+  const result = f.inbox();
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.data.messages[0].accountEmailAddresses, ["account-a@accounts.example"]);
+  assert.deepEqual(result.data.messages[1].accountEmailAddresses, addresses);
+  assert.equal(result.data.messages[1].accountName, "Account not-an-email-address");
+  assert.equal(result.data.unreadCount, 2);
+  assert.ok(f.messages.every((message) => !message.state.read && message.state.bodyReads === 0));
+  assert.deepEqual(f.changes, []);
+});
+
+test("empty or unavailable configured account addresses remain unknown without guessing", () => {
+  for (const addresses of [[], null, undefined]) {
+    const f = fixture();
+    f.accounts[0]!.emailAddresses = () => addresses;
+    const result = f.inbox();
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.data.messages[0].accountEmailAddresses, []);
+    assert.equal(f.first.state.read, false);
+    assert.equal(f.first.state.bodyReads, 0);
+    assert.deepEqual(f.changes, []);
+  }
+});
+
+test("account address lookup errors fail safely rather than guessing or reading the message", () => {
+  const f = fixture();
+  f.accounts[0]!.emailAddresses = () => {
+    throw new Error("PRIVATE ACCOUNT DETAILS");
+  };
+  const result = f.inbox();
+  assert.equal(result.ok, false);
+  assert.equal(result.error.mayHaveChanged, false);
+  assert.equal(JSON.stringify(result).includes("PRIVATE ACCOUNT DETAILS"), false);
+  assert.equal(f.first.state.bodyReads, 0);
+  assert.deepEqual(f.changes, []);
+});
+
+test("changed configured account addresses invalidate confirmation before mailbox changes", () => {
+  const f = fixture();
+  const id = f.inbox().data.messages[0].id;
+  const preview = f.run({ action: "inspect", operation: "archive", id }).data;
+  assert.deepEqual(preview.message.accountEmailAddresses, ["account-a@accounts.example"]);
+  f.accounts[0]!.emailAddresses = () => ["different@example.com"];
+  const result = f.run({ action: "archive", id, approvalToken: preview.approvalToken });
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, "STALE_APPROVAL");
+  assert.equal(result.error.mayHaveChanged, false);
+  assert.equal(f.first.state.bodyReads, 0);
+  assert.deepEqual(f.changes, []);
+});
+
 test("identifiers survive inbox reordering and reject moved or recycled identities", () => {
   const f = fixture();
   const id = f.inbox().data.messages[0].id;
@@ -202,6 +266,7 @@ test("reading returns plain text, reports marking read, and truncates long bodie
   const result = f.run({ action: "read", id });
   assert.equal(result.data.markedRead, true);
   assert.equal(result.data.message.read, true);
+  assert.deepEqual(result.data.message.accountEmailAddresses, ["account-a@accounts.example"]);
   assert.match(result.data.body, /Untrusted body/);
   assert.equal(result.data.truncated, false);
   Object.assign(f.first, { content: () => "x".repeat(40_000) });
