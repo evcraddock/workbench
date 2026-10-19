@@ -1,0 +1,41 @@
+{
+  "name": "@evcraddock/pi-migadu",
+  "version": "0.1.0",
+  "description": "Pi tools and companion instructions for Migadu domain and mailbox allowlists and denylists.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "keywords": [
+    "pi-package",
+    "migadu"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://forge.caradoc.com/erik/workbench.git",
+    "directory": "packages/migadu"
+  },
+  "files": [
+    "index.ts",
+    "src/",
+    "skills/"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  }
+}
