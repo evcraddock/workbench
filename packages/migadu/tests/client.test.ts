@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createMigaduClient,
+  listNames,
   MigaduError,
   normalizeList,
   parseTarget,
@@ -227,6 +228,34 @@ for (const status of [301, 400, 401, 403, 429, 500]) {
       }
     );
     assert.equal(calls, 1);
+  });
+}
+
+for (const [label, apiKey] of [
+  ["quote", 'fake-key-with-"quote"'],
+  ["backslash", "fake-key-with-" + String.fromCharCode(92) + "-backslash"],
+] as const) {
+  test(`withholds ${label} credential echoes before serialization in every list and scope`, async () => {
+    for (const target of [domain, mailbox]) {
+      for (const list of listNames) {
+        const identity =
+          target.scope === "domain"
+            ? { name: target.domain }
+            : { domain_name: target.domain, local_part: target.localPart };
+        const client = createMigaduClient({
+          credentials: () => ({ user: "admin@example.com", apiKey }),
+          fetch: async () =>
+            response({ ...identity, ...fields, [list]: [`prefix-${apiKey}-suffix`] }),
+        });
+        await assert.rejects(client.get(target), (error: unknown) => {
+          assert.ok(error instanceof MigaduError);
+          assert.equal(error.code, "INVALID_RESPONSE");
+          assert.equal(error.message.includes(apiKey), false);
+          assert.equal(JSON.stringify(error).includes(apiKey), false);
+          return true;
+        });
+      }
+    }
   });
 }
 

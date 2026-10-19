@@ -263,7 +263,13 @@ function parseSnapshot(
     sender_denylist: normalizeList(value.sender_denylist),
     recipient_denylist: normalizeList(value.recipient_denylist),
   };
-  if (containsCredential(JSON.stringify({ target, lists }), credentials)) {
+  // Check original values: JSON escaping must not hide quotes/backslashes in keys.
+  const returnedStrings = [
+    target.domain,
+    ...(target.scope === "mailbox" ? [target.localPart] : []),
+    ...listNames.flatMap((name) => lists[name]),
+  ];
+  if (returnedStrings.some((text) => containsCredential(text, credentials))) {
     throw new MigaduError(
       "INVALID_RESPONSE",
       "Migadu returned credential material in filtering data. Response withheld."
