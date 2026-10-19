@@ -7,6 +7,7 @@ export type MessageSummary = {
   id: string;
   accountId: string;
   accountName: string;
+  accountEmailAddresses: string[];
   sender: string;
   subject: string;
   receivedAt: string;
@@ -136,13 +137,24 @@ export function validateRequest(request: MailRequest): void {
 }
 
 function validSummary(value: unknown): value is MessageSummary {
-  keys(value, ["id", "accountId", "accountName", "sender", "subject", "receivedAt", "read"]);
+  keys(value, [
+    "id",
+    "accountId",
+    "accountName",
+    "accountEmailAddresses",
+    "sender",
+    "subject",
+    "receivedAt",
+    "read",
+  ]);
   validateId(value.id);
   const parts = JSON.parse(decodeURIComponent(value.id.slice(8))) as unknown[];
   return (
     value.accountId === parts[0] &&
     value.receivedAt === parts[2] &&
     text(value.accountName) &&
+    Array.isArray(value.accountEmailAddresses) &&
+    value.accountEmailAddresses.every((address) => text(address) && address.trim().length > 0) &&
     text(value.sender) &&
     text(value.subject) &&
     typeof value.read === "boolean"
@@ -158,6 +170,7 @@ export function approvalToken(result: Omit<InspectResult, "approvalToken" | "kin
     operation: result.operation,
     id: result.message.id,
     accountName: result.message.accountName,
+    accountEmailAddresses: result.message.accountEmailAddresses,
     sender: result.message.sender,
     subject: result.message.subject,
     receivedAt: result.message.receivedAt,

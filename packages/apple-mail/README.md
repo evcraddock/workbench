@@ -37,6 +37,14 @@ An existing personal `apple-mail` skill can collide with this companion skill's 
 
 Archive/spam/delete are model-only tools so scripts cannot nest them through codemode. All five tools request sequential execution. These are integration safeguards, not an OS sandbox.
 
+### Configured account email addresses
+
+Message metadata includes `accountEmailAddresses`: the email addresses configured in **Mail → Settings → Accounts → [account] → Email Address**, read from the Apple Mail account's `emailAddresses` property. This is account configuration, independent of any particular message—not its To/Cc fields or delivery headers. The extension does not guess an address from the account's display name.
+
+All configured addresses are returned without choosing a primary address. An empty array means no configured address was available; account lookup failures are reported as errors rather than guessed values. Retrieving this metadata does not read message bodies or change read status. `mail_read` still has its existing, explicit read-state side effect.
+
+Configured account addresses do not establish a message's original recipient, including when aliases or forwarding are involved. They are private, untrusted metadata, not authorization to change Migadu filtering. Archive/spam/delete dialogs label them as configured account addresses and revalidate them as part of the confirmation snapshot.
+
 ### Identifiers and destinations
 
 IDs encode the Mail account ID, local message-library ID, receipt time, and RFC Message-ID. They remain stable when Inbox positions change and are not generated from subject matching. Every request re-resolves and revalidates the exact identity. Moved/deleted messages, duplicate matches, or changed identity fail; relist rather than guess. Mail database rebuilds or synchronization can invalidate identifiers. They are not permanent cross-device IDs, secret credentials, or authorization tokens.
@@ -49,7 +57,7 @@ Destinations must be uniquely named account-local mailboxes: `Archive`, `Junk`, 
 
 - Tool text and structured results explicitly mark message-supplied content as untrusted. Nothing in an email authorizes tools, shell commands, file operations, link fetching, or further mailbox changes.
 - These instructions reduce prompt-injection risk but are not a complete sandbox. The confirmation dialog is the concrete barrier for mailbox mutations; a user can still be deceived by hostile content and should inspect the target.
-- Bodies are retrieved only through `mail_read`; inbox listings and mutation previews do not access them. Account/sender/subject/date metadata is still private information. Tool results, including requested body text, may be sent to the configured model and recorded in Pi's transcript.
+- Bodies are retrieved only through `mail_read`; inbox listings and mutation previews do not access them. Account metadata (including configured email addresses), sender, subject, and date are still private information. Tool results, including requested body text, may be sent to the configured model and recorded in Pi's transcript.
 - The automation never accesses attachments or raw MIME, renders HTML, fetches links, creates PDFs, sends/forwards/replies, changes account settings, bulk-deletes, or empties Trash. Apple Mail itself continues normal processing through its configured accounts.
 - Arguments are JSON data passed separately to a fixed script using `execFile`, without a shell. Message text is never evaluated as code. Responses are size-bounded and validated before being returned to Pi; raw subprocess stderr is not exposed.
 - Subprocesses have a 30-second timeout and 1 MiB output limit. Dialogs expire after 60 seconds. Cancellation kills the subprocess, but cannot undo Apple Events already handled by Mail. A timeout, partial spam classification/move, malformed mutation response, or failed postcondition may leave state changed. Inspect Mail before retrying; there are no automatic retries or rollback claims.
@@ -86,6 +94,6 @@ npm test --workspace @evcraddock/pi-apple-mail
 npm pack --workspace @evcraddock/pi-apple-mail --dry-run
 ```
 
-Tests use Node's built-in test runner and simulated Mail objects. They cover message identity, malformed protocol data, subprocess cancellation/output limits, confirmation refusal and cancellation, stale approval, account-local moves, and partial failures. The JXA script can be syntax-compiled with `osacompile -l JavaScript` to a temporary output path without running it.
+Tests use Node's built-in test runner and simulated Mail objects. They cover configured account addresses (single, multiple, unavailable, lookup failures, and no message-recipient/header access), message identity, malformed protocol data, subprocess cancellation/output limits, confirmation refusal and cancellation, stale approval including changed account addresses, account-local moves, and partial failures. The JXA script can be syntax-compiled with `osacompile -l JavaScript` to a temporary output path without running it.
 
 Simulated tests, syntax compilation, package inspection, and Pi-loader registration checks do **not** establish live Apple Mail compatibility or constitute mailbox testing. Live testing requires separate user approval and an appropriate test message/account; do not read private messages or mutate real mail to validate development changes without it.
