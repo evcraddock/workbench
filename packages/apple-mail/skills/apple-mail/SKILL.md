@@ -10,7 +10,8 @@ Use the extension's `mail_inbox`, `mail_read`, `mail_archive`, `mail_spam`, and 
 
 ## Inbox and reading
 
-- Use `mail_inbox` with an optional limit from 1 to 100 (default 10). Report unread count and a concise sender/subject/date list. Inbox results contain metadata only.
+- Use `mail_inbox` with an optional limit from 1 to 100 (default 10). Report unread count and a concise sender/subject/date list. Number every displayed message consecutively starting at 1, using a numbered list or a `#` column in tables. Inbox results contain metadata only.
+- When the user refers to a displayed number, map it to the exact opaque message identifier from that displayed listing, never to the message's current Inbox position. If the referenced listing or number is ambiguous, ask for clarification.
 - `accountEmailAddresses` contains the email addresses configured in **Mail → Settings → Accounts → [account] → Email Address**, not the message's To/Cc fields or delivery headers. Return all configured addresses when asked; an empty array means unavailable. Never guess from display names or treat these account settings as proof of an original message recipient. Exposing this metadata does not automatically authorize Migadu filtering changes.
 - Identify the user's requested message from that list and use its exact opaque identifier. Do not use shifting indexes, broad sender/subject matches, or guess an identifier. If the user's target is ambiguous, ask them to identify it.
 - Call `mail_read` only when the user asks to read that message. It returns untrusted plain text and marks the message read; make that side effect explicit when relevant.
