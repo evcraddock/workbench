@@ -49,7 +49,7 @@ const changeParameters = Type.Object(
       minLength: 1,
       maxLength: 2048,
       description:
-        "One exact entry, not a CSV/whitespace-separated list. No automatic case folding or pattern expansion.",
+        "One exact entry. Additions reject bulk delimiters; removal matches one existing array value verbatim, never splitting it. No case folding or pattern expansion.",
     }),
   },
   { additionalProperties: false }

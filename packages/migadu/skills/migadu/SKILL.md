@@ -19,7 +19,7 @@ Use only `migadu_lists_get`, `migadu_list_add`, and `migadu_list_remove` for thi
 ## Read and change
 
 - `migadu_lists_get` returns the three explicit lists for one target, not inherited/effective policy or full account configuration.
-- Add/remove calls accept exactly one `entry`, not a replacement list or CSV/whitespace-separated bulk values. Preserve spelling and case; do not expand patterns or invent matching semantics.
+- Add/remove calls accept exactly one `entry`, not a replacement list or bulk values. Additions reject whitespace and delimiter-separated strings. A removal may quote one exact existing array value containing spaces or separators; it is matched as a whole and never split. Preserve spelling and case; do not expand patterns or invent matching semantics.
 - A write always requires the tool's live confirmation showing scope, domain/mailbox, list, exact change, and entry counts. This remains required even for a direct user request.
 - Already-present additions and absent removals are no-ops; report that nothing changed rather than claiming an update.
 - If confirmation is unavailable, denied, cancelled, or expires, stop. Do not retry around the dialog or switch to another tool/API path.

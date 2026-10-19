@@ -53,7 +53,7 @@ Example mailbox-scoped addition arguments (still requires the tool's confirmatio
 }
 ```
 
-These are examples, not requests to access or change any account. An entry is an exact opaque value interpreted by Migadu: the extension does not expand patterns, infer precedence, or automatically case-fold entries. New entries must be nonempty, at most 2,048 characters, and contain no whitespace, commas, semicolons, or control characters. Do not pass CSV/bulk values. Existing array entries are preserved exactly, including valid opaque patterns. Domain and mailbox settings are returned separately; the tools do not calculate inherited/effective filtering behavior.
+These are examples, not requests to access or change any account. An entry is an exact opaque value interpreted by Migadu: the extension does not expand patterns, infer precedence, or automatically case-fold entries. New entries must be nonempty, at most 2,048 characters, and contain no whitespace, commas, semicolons, or control characters. Do not pass CSV/bulk values. Existing array entries are preserved exactly, including valid opaque patterns. A removal can quote one exact existing array value containing spaces or separators; it is matched as a whole, never split into multiple removals. Domain and mailbox settings are returned separately; the tools do not calculate inherited/effective filtering behavior.
 
 ## Update safeguards
 

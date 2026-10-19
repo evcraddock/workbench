@@ -108,13 +108,13 @@ export function createMigaduTools(client: MigaduClient = createMigaduClient()) {
         "INVALID_ARGUMENTS",
         "Select sender_allowlist, sender_denylist or recipient_denylist."
       );
-    const entry = validateEntry(entryValue);
+    const operation = name === "migadu_list_add" ? "add" : "remove";
+    const entry = validateEntry(entryValue, operation);
     if (!context.hasUI || typeof context.ui?.confirm !== "function")
       throw new MigaduError(
         "CONFIRMATION_UNAVAILABLE",
         "Migadu updates require a live confirmation dialog. No request was sent."
       );
-    const operation = name === "migadu_list_add" ? "add" : "remove";
     return serialized(target, signal, async () => {
       const original = await client.get(target, signal);
       const before = original.lists[list];

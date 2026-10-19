@@ -86,16 +86,18 @@ export function parseTarget(value: unknown): Target {
     "Domain scope must omit localPart. Mailbox scope requires a local part using letters, digits, dots, underscores, plus or hyphen, not a full address or path."
   );
 }
-export function validateEntry(value: unknown): string {
+export function validateEntry(value: unknown, operation: "add" | "remove" = "add"): string {
   if (
     typeof value !== "string" ||
     !value ||
     value.length > 2048 ||
-    /[\s,;\u0000-\u001f\u007f-\u009f]/u.test(value)
+    value !== value.trim() ||
+    /[\u0000-\u001f\u007f-\u009f]/u.test(value) ||
+    (operation === "add" && /[\s,;]/u.test(value))
   ) {
     throw new MigaduError(
       "INVALID_ARGUMENTS",
-      "Specify one nonempty entry (at most 2,048 characters), without whitespace, control characters, commas or semicolons. No bulk entry strings are accepted."
+      "Specify one nonempty, control-free entry of at most 2,048 characters. Additions cannot contain whitespace, commas or semicolons; removals match one existing value exactly, never a bulk string."
     );
   }
   return value;

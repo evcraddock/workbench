@@ -135,6 +135,23 @@ test("already present additions and absent removals are no-ops without a write o
   }
 });
 
+test("removes one exact opaque array entry without interpreting commas or spaces as bulk values", async () => {
+  const f = fixture();
+  const entry = "opaque,pattern with spaces";
+  f.lists.sender_allowlist.push(entry);
+  const result = await f.execute(
+    "migadu_list_remove",
+    { ...domain, list: "sender_allowlist", entry },
+    f.context
+  );
+  assert.equal(result.data.kind, "list_change");
+  if (result.data.kind !== "list_change") throw new Error();
+  assert.equal(result.data.changed, true);
+  assert.deepEqual(f.lists.sender_allowlist, ["friend@example.net"]);
+  assert.equal(f.writes.length, 1);
+  assert.ok(f.dialog().includes(JSON.stringify(entry)));
+});
+
 test("no UI, forged confirmation flags, invalid scope/list, and bulk values fail before API calls", async () => {
   const f = fixture();
   const input = { ...domain, list: "sender_allowlist", entry: "new@example.org" };
