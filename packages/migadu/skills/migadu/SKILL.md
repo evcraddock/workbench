@@ -13,7 +13,9 @@ Use only `migadu_lists_get`, `migadu_list_add`, and `migadu_list_remove` for thi
 - Every call requires `scope` (`domain` or `mailbox`) and `domain` (a DNS name, not a URL).
 - For mailbox scope also specify `localPart`, such as `erik` or `erik+tag`, not a full email address. For domain scope omit it.
 - The selected `list` must be `sender_allowlist`, `sender_denylist`, or `recipient_denylist`.
-- If the user has not identified the scope, target, list, or exact entry sufficiently, ask rather than guessing. Do not infer a domain-wide change from a mailbox request.
+- If the target domain is already known from the user's instructions, established conversation context, or trusted receiving-account metadata, reuse it and default to `scope: "domain"` unless the user requests mailbox scope. Do not ask again merely because the current request omits an already-known domain.
+- Honor an explicit mailbox-scoped request; do not broaden it to the domain. If the target domain, requested mailbox, selected list, or exact entry is unknown or ambiguous, ask rather than guessing.
+- Do not derive the target domain from the sender being blocked, an unverified account display name, or the Migadu login email alone. Those do not establish which receiving domain the user wants to manage.
 - Apple Mail spam/delete/archive requests do not authorize Migadu filtering changes. Ask for an explicit Migadu change instead of silently connecting the two workflows.
 
 ## Read and change
