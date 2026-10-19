@@ -1,0 +1,45 @@
+{
+  "name": "@evcraddock/pi-apple-mail",
+  "version": "0.1.0",
+  "description": "Pi tools and companion instructions for safely managing Apple Mail inbox messages.",
+  "type": "module",
+  "os": [
+    "darwin"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "keywords": [
+    "pi-package",
+    "apple-mail"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://forge.caradoc.com/erik/workbench.git",
+    "directory": "packages/apple-mail"
+  },
+  "files": [
+    "index.ts",
+    "src/",
+    "scripts/mail.js",
+    "skills/"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  }
+}
