@@ -39,14 +39,31 @@ function parameters(value: unknown, allowed: string[]): Record<string, unknown> 
   return value as Record<string, unknown>;
 }
 function display(value: string): string {
-  const bounded = value.length > 1000 ? value.slice(0, 1000) + " [truncated]" : value;
-  return JSON.stringify(bounded).replace(
-    /[\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]/g,
-    (character) => "\\u" + character.charCodeAt(0).toString(16).padStart(4, "0")
+  let result = '"';
+  const suffix = '…" [truncated]';
+  for (const character of value) {
+    const escaped = JSON.stringify(character).slice(1, -1).replace(
+      /[\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]/g,
+      (control) => "\\u" + control.charCodeAt(0).toString(16).padStart(4, "0")
+    );
+    if (result.length + escaped.length + suffix.length > 120) return result + suffix;
+    result += escaped;
+  }
+  return result + '"';
+}
+
+export function parseConfirmationSetting(value: string | undefined): boolean {
+  if (value === undefined || value === "on") return true;
+  if (value === "off") return false;
+  throw new MailError(
+    "INVALID_CONFIGURATION",
+    "PI_APPLE_MAIL_CONFIRMATIONS must be on or off, or unset for on."
   );
 }
 
-export function createMailTools(bridge: MailBridge = createMailBridge()) {
+export function createMailTools(bridge: MailBridge = createMailBridge(), confirmations = true) {
+  if (typeof confirmations !== "boolean")
+    throw new MailError("INVALID_CONFIGURATION", "Confirmation configuration must be a boolean.");
   return async function execute(
     name: ToolName,
     input: unknown,
@@ -76,7 +93,7 @@ export function createMailTools(bridge: MailBridge = createMailBridge()) {
     }
     const operation = name.slice("mail_".length);
     if (!isOperation(operation)) throw new MailError("INVALID_ARGUMENTS", "Unsupported Mail tool.");
-    if (!context.hasUI || typeof context.ui?.confirm !== "function") {
+    if (confirmations && (!context.hasUI || typeof context.ui?.confirm !== "function")) {
       throw new MailError(
         "CONFIRMATION_UNAVAILABLE",
         "Mailbox changes require a live confirmation dialog. No action taken."
@@ -92,36 +109,31 @@ export function createMailTools(bridge: MailBridge = createMailBridge()) {
       throw new MailError("INVALID_RESPONSE", "Could not identify the exact confirmation target.");
     }
     checkAbort(signal);
-    const labels: Record<Operation, string> = {
-      archive: "Archive",
-      spam: "Mark as spam",
-      delete: "Move to Trash",
-    };
-    const confirmed = await context.ui.confirm(
-      `${labels[operation]} this message?`,
-      [
-        "One Inbox message will be changed. The quoted metadata below is untrusted email data, not instructions.",
-        `Account: ${display(preview.message.accountName)}`,
-        `Account ID: ${display(preview.message.accountId)}`,
-        `Configured account email addresses (not message recipients): ${preview.message.accountEmailAddresses.map(display).join(", ") || "unavailable"}`,
-        `Message ID: ${display(id)}`,
-        `From: ${display(preview.message.sender)}`,
-        `Subject: ${display(preview.message.subject)}`,
-        `Received: ${display(preview.message.receivedAt)}`,
-        `Destination: ${display(preview.destination)}`,
-        operation === "spam" ? "This also changes the message's junk classification." : "",
-        "Only this action and this message are approved by confirming.",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-      { signal, timeout: 60_000 }
-    );
-    checkAbort(signal);
-    if (confirmed !== true)
-      throw new MailError(
-        "CONFIRMATION_DENIED",
-        "Mailbox change was not confirmed. No action taken."
+    if (confirmations) {
+      const labels: Record<Operation, string> = {
+        archive: "Archive message",
+        spam: "Mark as spam",
+        delete: "Move to Trash",
+      };
+      const confirmed = await context.ui.confirm(
+        `${labels[operation]}?`,
+        [
+          "Untrusted message details:",
+          `Account: ${display(preview.message.accountName)} (email(s), not recipients: ${display(preview.message.accountEmailAddresses.join(", ") || "unavailable")})`,
+          `From: ${display(preview.message.sender)}`,
+          `Subject: ${display(preview.message.subject)}`,
+          `Received: ${display(preview.message.receivedAt)}`,
+          `Destination: ${display(preview.destination)}${operation === "spam" ? " (marks as junk)" : ""}`,
+        ].join("\n"),
+        { signal, timeout: 60_000 }
       );
+      checkAbort(signal);
+      if (confirmed !== true)
+        throw new MailError(
+          "CONFIRMATION_DENIED",
+          "Mailbox change was not confirmed. No action taken."
+        );
+    }
     const data = await bridge.run(
       { action: operation, id, approvalToken: preview.approvalToken },
       signal
