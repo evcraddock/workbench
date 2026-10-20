@@ -140,7 +140,7 @@ After the release changes have been reviewed and publication explicitly authoriz
 npm publish --workspace @your-scope/pi-example-extension
 ```
 
-Publication requires npm authentication and permission for the chosen name/scope. Never commit credentials. Do not use blanket `npm publish --workspaces` or publish the repository root. The generic commands above are not the Apple Mail release path; use its scoped automation below.
+Publication requires npm authentication and permission for the chosen name/scope. Never commit credentials. Do not use blanket `npm publish --workspaces` or publish the repository root. The generic commands above are not the Apple Mail or Migadu release paths; use their scoped automation below.
 
 ### Apple Mail: GitHub Actions and npm trusted publishing
 
@@ -190,6 +190,45 @@ gh workflow run release.yml --repo evcraddock/workbench --ref apple-mail-v0.1.0
 Do not dispatch blindly after a failed or uncertain publication. The workflow never retries the publish write or treats an “already published” error as success; first inspect npm and the run logs. Registry verification retries only reads and compares the published name, version and `dist.integrity` to the verified tarball. If publication succeeded but verification failed, verify the existing version rather than trying to overwrite it. A changed tarball requires a new reviewed package version and tag.
 
 Finally, verify registry metadata with `npm view @evcraddock/pi-apple-mail@0.1.0 name version dist.integrity --json --registry https://registry.npmjs.org` (substitute the released version), and inspect provenance when the source repository is public. Report the actual release outcome; passing PR checks alone does not establish publication. Installation or live Mail testing remains a separate user-authorized action.
+
+### Migadu: independent OIDC releases
+
+`.github/workflows/release-migadu.yml` publishes only `@evcraddock/pi-migadu` from `packages/migadu/`, independently of Apple Mail. It uses the same GitHub-hosted Node 24 / npm 11.5.1+ OIDC pattern, a private workspace root, read-only PR verification and publication-job-only `id-token: write`. No stored npm publishing token, Migadu API credential, dependency installation, build step, or Pi installation is required. The Migadu manifest identifies `git+https://github.com/evcraddock/workbench.git` and `repository.directory: packages/migadu`.
+
+#### First-package setup
+
+Follow the one-time npm bootstrap process described above, but use exactly `@evcraddock/pi-migadu`. After explicit bootstrap approval, use an isolated temporary npm CLI login (npm 11.15.0+), copy the reviewed Migadu package outside the tracked checkout, change only that copy's version to `0.0.0-bootstrap`, and run `npm stage publish --access public --tag bootstrap` from the copy. The explicit bootstrap tag is needed for this prerelease candidate. Do not stage the real `0.1.0` release or approve the bootstrap candidate. Confirm the public holding package and ownership/settings in npm, and revoke the temporary CLI session/remove its isolated credential file afterward. Do not inspect real credentials or copy authentication into GitHub secrets.
+
+After the workflow is independently reviewed and merged, configure Migadu's own npm trusted-publisher connection:
+
+| Field | Value |
+| --- | --- |
+| Provider | GitHub Actions |
+| Organization or user | `evcraddock` |
+| Repository | `workbench` |
+| Workflow filename | `release-migadu.yml` |
+| Environment | Unset |
+| Allowed actions | Direct `npm publish` enabled; `npm dist-tag` disabled |
+
+The Apple Mail connection does not authorize Migadu publication. Complete the first successful OIDC publication within two days of creating the Migadu connection, and verify that npm changes its status to **Valid**. User-assisted sign-in or security-key prompts may be required for setup. Do not change account-wide security settings, publish another package, or approve an actual release merely to complete setup.
+
+#### Prepare, review and publish only Migadu
+
+1. The initial release uses Migadu's existing `0.1.0`. Later releases bump only its manifest with the agreed increment, for example `npm version patch --workspace @evcraddock/pi-migadu --no-git-tag-version`. This workflow accepts stable versions only.
+2. Run `npm test --workspace @evcraddock/pi-migadu` and `npm pack --workspace @evcraddock/pi-migadu --dry-run --json`. The release helper `packages/migadu/scripts/release-check.mjs` validates the root privacy, package/publisher identity, tag/version and pack JSON report. It requires exactly six files: `README.md`, `index.ts`, `package.json`, `skills/migadu/SKILL.md`, `src/client.ts` and `src/tools.ts`. The helper and tests are excluded from the artifact. Tests use synthetic credentials and injected HTTP mocks; do not invoke live Migadu to verify a release.
+3. Use a branch/PR, independent review and explicit human merge approval. PR checks cannot publish. Merge before creating the release tag.
+4. After confirming npm setup and receiving explicit publication approval, create and push the package-specific tag at the reviewed main commit. **Pushing this tag automatically publishes Migadu.**
+
+```bash
+git tag migadu-v0.1.0 <reviewed-main-commit>
+git push origin refs/tags/migadu-v0.1.0
+```
+
+A manual dispatch must use the existing tag as its ref: `gh workflow run release-migadu.yml --repo evcraddock/workbench --ref migadu-v0.1.0`. Main/branch dispatches are not release authorizations. The workflow validates the exact tag/version and main ancestry, tests Migadu, packs only that workspace, checks the six-file allowlist, uploads/downloads the same tarball, checks SHA-512, and publishes that artifact once with OIDC. Apple Mail's workflow and package remain unchanged.
+
+npm can accept a publication and sign provenance before the version becomes publicly readable. To accommodate processing, Migadu's release helper performs at most **21 unauthenticated registry GETs**, with 30 seconds between unsuccessful reads and a 10-second deadline on each request (roughly a ten-minute propagation window, within a 15-minute publication job). It retries 404/408/429/5xx responses and transient fetch errors, but never retries a publish write. A successful response must match name, version and tarball integrity; mismatched or malformed success data and non-transient HTTP errors fail immediately. Built-in-runner tests exercise delayed availability, transient errors, mismatches and the finite retry window without network access or real waits.
+
+After publication, verify `npm view @evcraddock/pi-migadu@0.1.0 name version dist.integrity --json --registry https://registry.npmjs.org`, `latest`, the npm provenance source/build links, and the trusted-publisher status. If npm processing exceeds the polling window, inspect the accepted release and finish read-only verification later; **do not rerun publishing blindly or move/reuse the tag**. A different tarball needs a new reviewed version/tag. Report any failed workflow conclusion accurately even if later registry verification succeeds. Install only after a separate installation request: `pi install npm:@evcraddock/pi-migadu`.
 
 ## Installation
 

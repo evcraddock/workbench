@@ -1,0 +1,140 @@
+name: Migadu release
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/release-migadu.yml'
+      - 'packages/migadu/**'
+      - 'package.json'
+      - 'docs/PACKAGES.md'
+  push:
+    tags:
+      - 'migadu-v*'
+  # Dispatch against the release tag so OIDC/provenance identifies the same revision.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migadu-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify Migadu
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name != 'pull_request' && github.ref_name || '' }}
+    outputs:
+      package_name: ${{ steps.pack.outputs.package_name }}
+      version: ${{ steps.pack.outputs.version }}
+      tarball: ${{ steps.pack.outputs.tarball }}
+      integrity: ${{ steps.pack.outputs.integrity }}
+    steps:
+      - name: Checkout the requested tag or PR revision
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      # Tests use Node's built-in runner, synthetic credentials and mocked HTTP.
+      # No dependency installation, real Migadu credentials or live API calls are needed.
+      - name: Validate release metadata
+        run: node packages/migadu/scripts/release-check.mjs "$RELEASE_TAG"
+
+      - name: Require release commits on main
+        if: github.event_name != 'pull_request'
+        run: |
+          test -n "$RELEASE_TAG"
+          git merge-base --is-ancestor HEAD origin/main
+
+      - name: Run Migadu tests
+        run: npm test --workspace @evcraddock/pi-migadu
+
+      - name: Pack only Migadu and check the actual tarball contents
+        id: pack
+        run: |
+          mkdir -p "$RUNNER_TEMP/migadu-release"
+          npm pack --workspace @evcraddock/pi-migadu \
+            --pack-destination "$RUNNER_TEMP/migadu-release" --json > "$RUNNER_TEMP/migadu-pack.json"
+          node packages/migadu/scripts/release-check.mjs \
+            "$RELEASE_TAG" "$RUNNER_TEMP/migadu-pack.json" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the verified tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: migadu-package
+          path: ${{ runner.temp }}/migadu-release/${{ steps.pack.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish Migadu with npm OIDC
+    needs: verify
+    if: github.ref_type == 'tag' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+      PACKAGE_NAME: ${{ needs.verify.outputs.package_name }}
+      VERSION: ${{ needs.verify.outputs.version }}
+      TARBALL: ${{ needs.verify.outputs.tarball }}
+      INTEGRITY: ${{ needs.verify.outputs.integrity }}
+    steps:
+      - name: Checkout the release tag for npm provenance
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - name: Set up Node for trusted publishing
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Check npm supports trusted publishing
+        run: |
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import assert from 'node:assert/strict';
+          const [major, minor, patch] = execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim().split('.').map(Number);
+          assert(major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1))), 'npm >=11.5.1 is required for OIDC');
+          NODE
+
+      - name: Download the verified tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: migadu-package
+          path: ${{ runner.temp }}/migadu-release
+
+      - name: Verify tarball integrity before publication
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { readFileSync } from 'node:fs';
+          const path = `${process.env.RUNNER_TEMP}/migadu-release/${process.env.TARBALL}`;
+          const integrity = 'sha512-' + createHash('sha512').update(readFileSync(path)).digest('base64');
+          assert.equal(integrity, process.env.INTEGRITY, 'The artifact must match the verified tarball');
+          NODE
+
+      # npm exchanges GitHub's OIDC identity for short-lived publish credentials.
+      # Do not add a stored npm publishing token. Public sources get automatic provenance.
+      - name: Publish exactly the verified Migadu tarball
+        run: npm publish "$RUNNER_TEMP/migadu-release/$TARBALL" --access public --registry https://registry.npmjs.org
+
+      - name: Wait for npm processing and verify the published name, version and integrity
+        run: node packages/migadu/scripts/release-check.mjs --verify-published
