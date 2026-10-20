@@ -1,0 +1,159 @@
+name: Apple Mail release
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'packages/apple-mail/**'
+      - 'package.json'
+      - 'docs/PACKAGES.md'
+  push:
+    tags:
+      - 'apple-mail-v*'
+  # Dispatch against the release tag, not main, so the OIDC/provenance run identity
+  # refers to the same revision as the package: gh workflow run release.yml --ref <tag>.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apple-mail-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify Apple Mail
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name != 'pull_request' && github.ref_name || '' }}
+    outputs:
+      package_name: ${{ steps.pack.outputs.package_name }}
+      version: ${{ steps.pack.outputs.version }}
+      tarball: ${{ steps.pack.outputs.tarball }}
+      integrity: ${{ steps.pack.outputs.integrity }}
+    steps:
+      - name: Checkout the requested tag or PR revision
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      # There are no runtime dependencies or lockfile. Tests use Node's built-in runner
+      # and simulated Mail objects, so no installation or live Apple Mail access is needed.
+      - name: Validate release metadata
+        run: node packages/apple-mail/scripts/release-check.mjs "$RELEASE_TAG"
+
+      - name: Require release commits on main
+        if: github.event_name != 'pull_request'
+        run: |
+          test -n "$RELEASE_TAG"
+          git merge-base --is-ancestor HEAD origin/main
+
+      - name: Run Apple Mail tests
+        run: npm test --workspace @evcraddock/pi-apple-mail
+
+      - name: Pack only Apple Mail and check the actual tarball contents
+        id: pack
+        run: |
+          mkdir -p "$RUNNER_TEMP/apple-mail-release"
+          npm pack --workspace @evcraddock/pi-apple-mail \
+            --pack-destination "$RUNNER_TEMP/apple-mail-release" --json > "$RUNNER_TEMP/apple-mail-pack.json"
+          node packages/apple-mail/scripts/release-check.mjs \
+            "$RELEASE_TAG" "$RUNNER_TEMP/apple-mail-pack.json" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the verified tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-mail-package
+          path: ${{ runner.temp }}/apple-mail-release/${{ steps.pack.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish Apple Mail with npm OIDC
+    needs: verify
+    if: github.ref_type == 'tag' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PACKAGE_NAME: ${{ needs.verify.outputs.package_name }}
+      VERSION: ${{ needs.verify.outputs.version }}
+      TARBALL: ${{ needs.verify.outputs.tarball }}
+      INTEGRITY: ${{ needs.verify.outputs.integrity }}
+    steps:
+      - name: Checkout the release tag for npm provenance
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - name: Set up Node for trusted publishing
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Check npm supports trusted publishing
+        run: |
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import assert from 'node:assert/strict';
+          const [major, minor, patch] = execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim().split('.').map(Number);
+          assert(major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1))), 'npm >=11.5.1 is required for OIDC');
+          NODE
+
+      - name: Download the verified tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: apple-mail-package
+          path: ${{ runner.temp }}/apple-mail-release
+
+      - name: Verify tarball integrity before publication
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { readFileSync } from 'node:fs';
+          const path = `${process.env.RUNNER_TEMP}/apple-mail-release/${process.env.TARBALL}`;
+          const integrity = 'sha512-' + createHash('sha512').update(readFileSync(path)).digest('base64');
+          assert.equal(integrity, process.env.INTEGRITY, 'The artifact must match the verified tarball');
+          NODE
+
+      # npm obtains short-lived credentials from GitHub's OIDC identity. Do not add
+      # NPM_TOKEN or NODE_AUTH_TOKEN. Public source repositories get automatic provenance.
+      - name: Publish exactly the verified Apple Mail tarball
+        run: npm publish "$RUNNER_TEMP/apple-mail-release/$TARBALL" --access public --registry https://registry.npmjs.org
+
+      - name: Verify the published name, version and integrity
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if npm view "$PACKAGE_NAME@$VERSION" name version dist.integrity \
+              --json --registry https://registry.npmjs.org > "$RUNNER_TEMP/apple-mail-published.json"; then
+              if node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          const data = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/apple-mail-published.json`, 'utf8'));
+          assert.equal(data.name, process.env.PACKAGE_NAME);
+          assert.equal(data.version, process.env.VERSION);
+          assert.equal(data['dist.integrity'], process.env.INTEGRITY);
+          NODE
+              then
+                echo "$PACKAGE_NAME@$VERSION is available with the verified tarball integrity"
+                exit 0
+              fi
+            fi
+            if [ "$attempt" -lt 5 ]; then sleep 15; fi
+          done
+          echo '::error::Published Apple Mail registry metadata could not be verified; inspect before retrying publication.'
+          exit 1

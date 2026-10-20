@@ -15,7 +15,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://forge.caradoc.com/erik/workbench.git",
+    "url": "git+https://github.com/evcraddock/workbench.git",
     "directory": "packages/apple-mail"
   },
   "files": [
