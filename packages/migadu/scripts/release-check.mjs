@@ -58,35 +58,37 @@ export async function waitForPublished(metadata, {
   const url = `https://registry.npmjs.org/${encodeURIComponent(packageName)}/${metadata.version}`;
   const attempts = 21;
   for (let attempt = 1; attempt <= attempts; attempt++) {
-    let response;
     let data;
+    let complete = false;
     try {
-      response = await request(url, {
+      const response = await request(url, {
         method: "GET",
         redirect: "error",
         signal: AbortSignal.timeout(10000),
       });
-      // Fetch resolves at headers; body consumption can still time out or disconnect.
-      if (response.status === 200) data = await response.json();
+      // Fetch resolves at headers. Both reading and disposing a body can still fail.
+      if (response.status === 200) {
+        data = await response.json();
+        complete = true;
+      } else {
+        if (![404, 408, 429].includes(response.status) && !(response.status >= 500 && response.status <= 599)) {
+          throw new Error(`Registry verification refused HTTP ${response.status}`);
+        }
+        log(`Registry read ${attempt}/${attempts}: HTTP ${response.status}; version not yet verified`);
+        await response.body?.cancel();
+      }
     } catch (error) {
       if (!(error instanceof TypeError) &&
           !(error instanceof DOMException && ["TimeoutError", "AbortError"].includes(error.name))) throw error;
-      response = undefined;
       log(`Registry read ${attempt}/${attempts}: transient ${error.name}`);
     }
-    if (response) {
-      if (response.status === 200) {
-        assert.equal(data.name, packageName, "Published package name mismatch");
-        assert.equal(data.version, metadata.version, "Published version mismatch");
-        assert.equal(data.dist?.integrity, metadata.integrity, "Published tarball integrity mismatch");
-        log(`${packageName}@${metadata.version} is available with the verified tarball integrity`);
-        return data;
-      }
-      await response.body?.cancel();
-      if (![404, 408, 429].includes(response.status) && !(response.status >= 500 && response.status <= 599)) {
-        throw new Error(`Registry verification refused HTTP ${response.status}`);
-      }
-      log(`Registry read ${attempt}/${attempts}: HTTP ${response.status}; version not yet verified`);
+    // Invalid success data is not a transport failure and must never be retried.
+    if (complete) {
+      assert.equal(data?.name, packageName, "Published package name mismatch");
+      assert.equal(data.version, metadata.version, "Published version mismatch");
+      assert.equal(data.dist?.integrity, metadata.integrity, "Published tarball integrity mismatch");
+      log(`${packageName}@${metadata.version} is available with the verified tarball integrity`);
+      return data;
     }
     if (attempt < attempts) await sleep(30000);
   }

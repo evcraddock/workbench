@@ -153,6 +153,49 @@ for (const error of [
   });
 }
 
+for (const status of [404, 429, 503]) {
+  for (const error of [
+    new TypeError("simulated retryable-response body reset"),
+    new DOMException("simulated retryable-response deadline", "TimeoutError"),
+  ]) {
+    test(`registry verification retries HTTP ${status} with a ${error.name} during body disposal`, async () => {
+      let reads = 0;
+      const sleeps: number[] = [];
+      const result = await waitForPublished(expected, {
+        request: async () => {
+          reads++;
+          if (reads === 1) {
+            return new Response(new ReadableStream({
+              start(controller) { controller.error(error); },
+            }), { status });
+          }
+          return json(published());
+        },
+        sleep: async (ms: number) => { sleeps.push(ms); },
+        log: () => {},
+      });
+      assert.deepEqual(result, published());
+      assert.equal(reads, 2);
+      assert.deepEqual(sleeps, [30000]);
+    });
+  }
+}
+
+test("non-transient HTTP errors remain fail-fast even when their response bodies are errored", async () => {
+  let reads = 0;
+  await assert.rejects(waitForPublished(expected, {
+    request: async () => {
+      reads++;
+      return new Response(new ReadableStream({
+        start(controller) { controller.error(new TypeError("simulated unauthorized-response reset")); },
+      }), { status: 401 });
+    },
+    sleep: async () => { assert.fail("An HTTP 401 must not become a transport retry"); },
+    log: () => {},
+  }), /HTTP 401/);
+  assert.equal(reads, 1);
+});
+
 test("registry verification stops immediately on mismatched identity/integrity or malformed success data", async () => {
   for (const data of [
     { ...published(), name: "@evcraddock/pi-apple-mail" },
