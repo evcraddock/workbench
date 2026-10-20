@@ -59,20 +59,23 @@ export async function waitForPublished(metadata, {
   const attempts = 21;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     let response;
+    let data;
     try {
       response = await request(url, {
         method: "GET",
         redirect: "error",
         signal: AbortSignal.timeout(10000),
       });
+      // Fetch resolves at headers; body consumption can still time out or disconnect.
+      if (response.status === 200) data = await response.json();
     } catch (error) {
       if (!(error instanceof TypeError) &&
           !(error instanceof DOMException && ["TimeoutError", "AbortError"].includes(error.name))) throw error;
+      response = undefined;
       log(`Registry read ${attempt}/${attempts}: transient ${error.name}`);
     }
     if (response) {
       if (response.status === 200) {
-        const data = await response.json();
         assert.equal(data.name, packageName, "Published package name mismatch");
         assert.equal(data.version, metadata.version, "Published version mismatch");
         assert.equal(data.dist?.integrity, metadata.integrity, "Published tarball integrity mismatch");

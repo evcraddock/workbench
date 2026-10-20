@@ -127,12 +127,38 @@ test("registry verification retries transient network/server responses but never
   assert.equal(reads, 4);
 });
 
+for (const error of [
+  new TypeError("simulated response-body connection reset"),
+  new DOMException("simulated response-body deadline", "TimeoutError"),
+]) {
+  test(`registry verification retries a transient ${error.name} during response-body reading`, async () => {
+    let reads = 0;
+    const sleeps: number[] = [];
+    const result = await waitForPublished(expected, {
+      request: async () => {
+        reads++;
+        if (reads === 1) {
+          return new Response(new ReadableStream({
+            start(controller) { controller.error(error); },
+          }));
+        }
+        return json(published());
+      },
+      sleep: async (ms: number) => { sleeps.push(ms); },
+      log: () => {},
+    });
+    assert.deepEqual(result, published());
+    assert.equal(reads, 2);
+    assert.deepEqual(sleeps, [30000]);
+  });
+}
+
 test("registry verification stops immediately on mismatched identity/integrity or malformed success data", async () => {
   for (const data of [
     { ...published(), name: "@evcraddock/pi-apple-mail" },
     { ...published(), version: "9.9.9" },
     { ...published(), dist: { integrity: "sha512-wrong" } },
-    {},
+    {}, null, [],
   ]) {
     let reads = 0;
     await assert.rejects(waitForPublished(expected, {
@@ -143,7 +169,9 @@ test("registry verification stops immediately on mismatched identity/integrity o
     assert.equal(reads, 1);
   }
   await assert.rejects(waitForPublished(expected, {
-    request: async () => new Response("not JSON"), log: () => {},
+    request: async () => new Response("not JSON"),
+    sleep: async () => { assert.fail("Malformed JSON is not a transient transport error"); },
+    log: () => {},
   }), /JSON/);
 });
 
