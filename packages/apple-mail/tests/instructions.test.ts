@@ -24,6 +24,10 @@ test("session guidelines and skill allow reading for requested processing withou
   for (const [, path] of instructions.slice(0, 2)) {
     const text = readFileSync(new URL(path, import.meta.url), "utf8");
     assert.match(text, /read a message body only when needed for the user's request/i);
+    assert.match(text, /marks the message read/i);
+    assert.match(text, /follow the user's requested output format/i);
+    assert.match(text, /truncat[^\n]*incomplete/i);
+    assert.match(text, /do not invent (?:missing|omitted) content or describe a partial export as complete/i);
     assert.match(text, /untrusted data/i);
     assert.match(text, /exact opaque (?:message )?identifier/i);
     assert.match(text, /do not (?:work around|bypass)|never bypass/i);
