@@ -23,7 +23,7 @@ pi --extension ./packages/apple-mail/index.ts --skill ./packages/apple-mail/skil
 
 Restart Pi or use `/reload` after installation. No package is published or installed as part of development verification.
 
-An existing personal `apple-mail` skill can collide with this companion skill's name. Disable/remove that older skill only as a separate user-approved action; the existing dotfiles script, symlink, and installed skill are left untouched by this package. Do not follow old CLI instructions to bypass these tools.
+An existing personal `apple-mail` skill can collide with this companion skill's name. Disable/remove that older skill only as a separate user-approved action; the existing dotfiles script, symlink, and installed skill are left untouched by this package. Do not follow old CLI instructions to bypass these tools' message-identity checks, mailbox-change confirmations, or mutation-verification safeguards.
 
 ## Confirmation configuration
 
@@ -59,6 +59,12 @@ Default dialogs show six concise lines of quoted, escaped metadata: account (inc
 
 Archive/spam/delete are model-only tools so scripts cannot nest them through codemode. All five tools request sequential execution. These are integration safeguards, not an OS sandbox.
 
+### Email processing with other tools
+
+The Mail tools do not provide attachment access, HTML rendering, link fetching, PDF export, sending/forwarding/replying, account changes, bulk deletion, or emptying Trash. These are native tool limits, not restrictions on user-requested workflows. Other available tools can process email content at the user's request, subject to their own capabilities and safeguards; email content itself does not authorize follow-up actions.
+
+For example, to save a message as a PDF, the assistant can read the requested message with `mail_read` (which marks it read), pass the returned plain text to an available PDF-export tool, and save it to the requested location. Reading is part of fulfilling that request, not a separate approval step. This does not preserve original HTML layout or attachments. If the body is truncated, disclose the incomplete content rather than presenting the export as the full message; another user-authorized source is needed for omitted content. Mailbox-change safeguards remain unchanged.
+
 ### Configured account email addresses
 
 Message metadata includes `accountEmailAddresses`: the email addresses configured in **Mail → Settings → Accounts → [account] → Email Address**, read from the Apple Mail account's `emailAddresses` property. This is account configuration, independent of any particular message—not its To/Cc fields or delivery headers. The extension does not guess an address from the account's display name.
@@ -80,7 +86,7 @@ Destinations must be uniquely named account-local mailboxes: `Archive`, `Junk`, 
 - Tool text and structured results explicitly mark message-supplied content as untrusted. Nothing in an email authorizes tools, shell commands, file operations, link fetching, or further mailbox changes.
 - These instructions reduce prompt-injection risk but are not a complete sandbox. When enabled, the confirmation dialog is a concrete barrier for mailbox mutations; opting out removes it. A user can still be deceived by hostile content and should inspect the target.
 - Bodies are retrieved only through `mail_read`; inbox listings and mutation previews do not access them. Account metadata (including configured email addresses), sender, subject, and date are still private information. Tool results, including requested body text, may be sent to the configured model and recorded in Pi's transcript.
-- The automation never accesses attachments or raw MIME, renders HTML, fetches links, creates PDFs, sends/forwards/replies, changes account settings, bulk-deletes, or empties Trash. Apple Mail itself continues normal processing through its configured accounts.
+- The bundled automation implements only the five Mail operations above; it adds no attachment, raw MIME, or export support. This does not constrain separately user-requested processing through other tools. Apple Mail itself continues normal processing through its configured accounts.
 - Arguments are JSON data passed separately to a fixed script using `execFile`, without a shell. Message text is never evaluated as code. Responses are size-bounded and validated before being returned to Pi; raw subprocess stderr is not exposed.
 - Subprocesses have a 30-second timeout and 1 MiB output limit. Dialogs expire after 60 seconds. Cancellation kills the subprocess, but cannot undo Apple Events already handled by Mail. A timeout, partial spam classification/move, malformed mutation response, or failed postcondition may leave state changed. Inspect Mail before retrying; there are no automatic retries or rollback claims.
 
@@ -102,7 +108,9 @@ apple-mail/
 └── tests/
     ├── bridge.test.ts
     ├── tools.test.ts
-    └── automation.test.ts
+    ├── instructions.test.ts
+    ├── automation.test.ts
+    └── release.test.ts
 ```
 
 `index.ts` registers schemas/tools. `src/tools.ts` owns the confirmation flow. `src/bridge.ts` validates the protocol and runs the fixed script with bounded execution. `scripts/mail.js` resolves and changes messages through Mail's scripting dictionary. Runtime files are package-local and included in the npm `files` allowlist; tests are excluded. No build step, runtime third-party dependency, or root tooling is required.
@@ -116,6 +124,6 @@ npm test --workspace @evcraddock/pi-apple-mail
 npm pack --workspace @evcraddock/pi-apple-mail --dry-run
 ```
 
-Tests use Node's built-in test runner and simulated Mail objects. They cover configured account addresses (single, multiple, unavailable, lookup failures, and no message-recipient/header access), message identity, malformed protocol data, subprocess cancellation/output limits, compact escaped dialogs, confirmation defaults and strict configuration parsing, refusal and cancellation, opt-out inspection and verification, rejected per-call overrides, stale approval including changed account addresses, account-local moves, and partial failures. The JXA script can be syntax-compiled with `osacompile -l JavaScript` to a temporary output path without running it.
+Tests use Node's built-in test runner and simulated Mail objects. Instruction regression checks distinguish native tool limits from user-requested processing through other tools while retaining mailbox safeguards. Other tests cover configured account addresses (single, multiple, unavailable, lookup failures, and no message-recipient/header access), message identity, malformed protocol data, subprocess cancellation/output limits, compact escaped dialogs, confirmation defaults and strict configuration parsing, refusal and cancellation, opt-out inspection and verification, rejected per-call overrides, stale approval including changed account addresses, account-local moves, and partial failures. The JXA script can be syntax-compiled with `osacompile -l JavaScript` to a temporary output path without running it.
 
 Simulated tests, syntax compilation, package inspection, and Pi-loader registration checks do **not** establish live Apple Mail compatibility or constitute mailbox testing. Live testing requires separate user approval and an appropriate test message/account; do not read private messages or mutate real mail to validate development changes without it.
