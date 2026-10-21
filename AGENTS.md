@@ -17,4 +17,3 @@ This repository holds independently published npm packages for Pi. Before adding
 - Implement only explicitly requested packages and behavior. The Apple Mail conversion is separate work in `task-316b8934`.
 - Do not introduce templates, CI, linting, test frameworks, dependencies, build tooling, or other scaffolding unless separately approved.
 - Do not publish npm packages or modify the user's Pi installation without explicit authorization.
-- Do not change task metadata or post task comments unless explicitly requested.
