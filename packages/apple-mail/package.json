@@ -1,6 +1,6 @@
 {
   "name": "@evcraddock/pi-apple-mail",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pi tools and companion instructions for safely managing Apple Mail inbox messages.",
   "type": "module",
   "os": [
