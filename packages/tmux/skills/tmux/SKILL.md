@@ -39,7 +39,7 @@ tmux -S "$SOCKET" send-keys -t "$PANE_ID" -l -- "$text"
 ./scripts/wait-for-text.sh -S "$SOCKET" -t "$PANE_ID" --fixed -p 'ready' -T 15
 ```
 
-Set a wait below the active tool timeout, leaving time for capture and cleanup. The helper accepts waits of 1–120 seconds, exits 124 on timeout, and reports capture/input errors immediately. It owns no sessions and never removes the caller's resources. Text or a synchronization signal is evidence of observation, **not** proof that a command succeeded; verify the actual requested outcome separately. Timeout capture is diagnostic output, not a successful result.
+Set a wait below the active tool timeout, leaving time for an extra clock tick, polling/capture, and cleanup. The helper accepts waits of 1–120 seconds, exits 124 on timeout, and reports capture/input errors immediately. Its coarse-clock deadline may add up to one second plus polling/capture time, but must not expire before the requested interval. It owns no sessions and never removes the caller's resources. Text or a synchronization signal is evidence of observation, **not** proof that a command succeeded; verify the actual requested outcome separately. Timeout capture is diagnostic output, not a successful result.
 
 On every completed/failed path, remove any recorded observer first: `kill-window -t "$OBSERVER_WINDOW_ID"` for an owned observer window, or `kill-pane -t "$OBSERVER_PANE_ID"` for an owned pane, using its recorded `OBSERVER_SOCKET`. Then remove the worker using its recorded socket and exact session ID:
 

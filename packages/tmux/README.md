@@ -49,7 +49,7 @@ Tests use Node's built-in test runner and require tmux. They create short-lived 
 
 ## Migration and extension research
 
-Imported from [`evcraddock/todu-workflow`](https://github.com/evcraddock/todu-workflow/tree/1c9ee0c6266af18f6cdcadaf79c414eba665b80e/skills/tmux) at commit `1c9ee0c6266af18f6cdcadaf79c414eba665b80e`; helpers and optional recipes are unchanged. Only the skill's repository-development check instructions were adapted.
+Imported from [`evcraddock/todu-workflow`](https://github.com/evcraddock/todu-workflow/tree/1c9ee0c6266af18f6cdcadaf79c414eba665b80e/skills/tmux) at commit `1c9ee0c6266af18f6cdcadaf79c414eba665b80e`. Optional recipes, startup, and discovery helpers are unchanged. The skill's repository-development checks were adapted, and review found an inherited Bash 3.2 timing bug: `wait-for-text.sh` now reserves an extra integer clock tick so waits cannot expire early. Allow up to one second of clock slack plus polling/capture time below the outer tool deadline; this is documented in the skill and covered by delayed-readiness and timeout-duration tests.
 
 Upstream removal is deliberately deferred until distribution and a user-approved migration are ready. This task does not change `todu-workflow`, installed Pi resources, npm, or release automation. Publication needs separate authorization and package-specific release preparation per [Workbench packaging guidance](../../docs/PACKAGES.md) (repository link, not an installed runtime dependency).
 

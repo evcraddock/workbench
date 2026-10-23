@@ -170,8 +170,16 @@ test('wait observes literal output; timeout is diagnostic and preserves caller s
     '--fixed', '-p', 'never-printed-token', '-T', '1', '-i', '0.05');
   assert.equal(result.status, 124, result.stderr);
   assert.match(result.stderr, /diagnostics only/);
-  assert.ok(performance.now() - before < 3000);
+  const elapsed = performance.now() - before;
+  assert.ok(elapsed >= 1000, `Timeout expired early after ${elapsed}ms`);
+  assert.ok(elapsed < 3000, `Timeout exceeded clock/polling slack: ${elapsed}ms`);
   assert.deepEqual(t.sessions(t.socket), [t.guard, data.SESSION_ID].sort());
+}));
+
+test('one-second wait accepts readiness arriving within that second', () => fixture(t => {
+  const data = t.start('--command', "sleep 0.7; printf 'delayed-readiness\\n'; exec /bin/sh");
+  t.ok(t.helper('wait-for-text.sh', '-S', t.socket, '-t', data.PANE_ID,
+    '--fixed', '-p', 'delayed-readiness', '-T', '1', '-i', '0.05'));
 }));
 
 test('invalid waits and capture errors are not hidden as timeouts', () => fixture(t => {

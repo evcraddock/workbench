@@ -9,7 +9,7 @@ usage() {
     '  -p, --pattern TEXT    Extended regex (or literal with --fixed), required' \
     '  -S, --socket-path P   Private socket (default: $TMUX_SKILL_SOCKET_DIR/tmux-skill.sock)' \
     '  -F, --fixed           Literal pattern' \
-    '  -T, --timeout N       1..120 seconds (default: 15); stay below your tool timeout' \
+    '  -T, --timeout N       1..120 seconds (default: 15); allow an extra clock tick plus polling/capture time' \
     '  -i, --interval N      0.01..1 seconds (default: 0.1)' \
     '  -l, --lines N         Positive history line count (default: 1000)' \
     '  -h, --help            Show help' \
@@ -53,6 +53,10 @@ socket_path="${socket_path:-${TMUX_SKILL_SOCKET_DIR:-${TMPDIR:-/tmp}/tmux-skill-
 trap 'exit 130' INT
 trap 'exit 143' TERM
 SECONDS=0
+# Bash 3.2 may advance its integer SECONDS counter at the next clock tick,
+# less than one elapsed second after reset. One extra tick prevents an early
+# timeout; reserve this slack plus polling/capture time in the outer tool bound.
+timeout_tick=$((timeout + 1))
 while true; do
   if ! pane_text=$(tmux -S "$socket_path" capture-pane -p -J -t "$target" -S "-$lines" 2>&1); then
     error "Cannot capture pane $target on $socket_path: $pane_text"
@@ -60,7 +64,7 @@ while true; do
   if printf '%s\n' "$pane_text" | grep "$grep_flag" -- "$pattern" >/dev/null; then
     exit 0
   fi
-  if (( SECONDS >= timeout )); then
+  if (( SECONDS >= timeout_tick )); then
     printf 'Timed out after %ss waiting for text in %s. Last capture (diagnostics only):\n%s\n' \
       "$timeout" "$target" "$pane_text" >&2
     exit 124

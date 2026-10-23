@@ -14,7 +14,7 @@ Task: `task-a01593e5`. Decision: ship a skills-only package now; recommend a nar
 
 `packages/tmux/` is the independent `@evcraddock/pi-tmux` package, version `0.1.0`, with `pi.skills: ["./skills"]` and no `pi.extensions`. The five runtime files are the skill, optional recipes, and three executable helpers. They contain no imports from other packages or upstream checkouts. README and manifest are also in the npm artifact. Research and development tests are repository-only.
 
-Helpers and `ADVANCED.md` are unchanged from the source commit. The skill's final development paragraph now names checks that exist in Workbench instead of the removed upstream pytest file and upstream pre-PR script. There is no new runtime behavior.
+`ADVANCED.md`, `start-session.sh`, and `find-sessions.sh` are unchanged from the source commit. The skill's final development paragraph now names checks that exist in Workbench instead of the removed upstream pytest file and upstream pre-PR script. Independent review found an inherited Bash 3.2 bug: resetting integer `SECONDS` can leave a fractional tick, making waits expire before the requested duration. `wait-for-text.sh` now allows one extra clock tick before timeout, with lower-bound and delayed-readiness regression tests. The skill documents reserving that slack (up to one second plus polling/capture) inside the outer tool deadline; other helper behavior is unchanged.
 
 Retained behavior:
 
