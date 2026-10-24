@@ -1,0 +1,25 @@
+{
+  "name": "@evcraddock/pi-tmux",
+  "version": "0.1.0",
+  "description": "Explicit tmux terminal control instructions and isolated-session helpers for Pi.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "keywords": ["pi-package", "tmux"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/evcraddock/workbench.git",
+    "directory": "packages/tmux"
+  },
+  "files": ["skills/"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "skills": ["./skills"]
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  }
+}
